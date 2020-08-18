@@ -293,3 +293,36 @@ tf = clearing.transform("https://vk.com/lambdamai")
    787248, ... ]}]
 ```
 
+
+### Ml
+
+`pipeline/ml` - пайпы которые относятся к интелектуальной обработке
+
+#### ClassificationNSFWContentPipeline
+
+Классфикация пользовательских изображений на NSFW контент. 
+Модель взята от https://github.com/GantMan/nsfw_model
+
+**model_path** - путь к модели <br/>
+**threshold_prediction** - пороговое значение для классфикации
+ 
+**Example**
+
+```python
+from sklearn.pipeline import Pipeline
+from pipeline import photos
+from pipeline.ml import nsfw
+clearing = Pipeline([
+    ('user_photos', photos.GetUserPhotoPipeline(max_repeat_count=0, sizes=['x'], photo_type='wall')),
+    ('nsfw_content', nsfw.ClassificationNSFWContentPipeline(model_path='./models/nsfw.299x299.h5'))
+])
+tf = clearing.transform("https://vk.com/satanoll")
+```
+**Output**
+```
+[{332256187: {'hentai': 0,
+   'drawings': 0,
+   'neutral': 13,
+   'porn': 0,
+   'sexy': 0}}]
+```

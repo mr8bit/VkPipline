@@ -9,6 +9,11 @@ venv/
 .ipynb_checkpoints
 vk_config.v2.json
 
+#Ml files
+*/*.h5
+*/*.bin
+
+
 # Random files
 *~
 .env
