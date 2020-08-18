@@ -50,7 +50,7 @@ for batch in tqdm(group_batches):
                 repeat_post = int(resp['count']/100)
                 offset = 0
                 for post_100 in range(repeat_post):
-                    time.sleep(0.5)
+                    time.sleep(0.4)
                     resp = vk.wall.get(owner_id=owner_id * -1, offset=0, count=100)
                     offset+=100
                     f.write(str(resp['items'])[1:-1])

@@ -6,6 +6,8 @@ import re
 import pymorphy2
 from stop_words import get_stop_words
 import numpy as np
+from tqdm import tqdm
+import math
 
 stop_words = get_stop_words('ru')
 
@@ -53,7 +55,7 @@ class GetAllTextPostsFromGroupPipeline(TransformerMixin):
         return cleaned_post
 
 
-class GetAllTextAndPhotosFromGroupListPipeline(TransformerMixin):
+class GetAllTextFromGroupListPipeline(TransformerMixin):
     """
         Получаем все посты с списка гурпп ВК
         max_repeat_count - количество внутренних итераций
@@ -70,31 +72,32 @@ class GetAllTextAndPhotosFromGroupListPipeline(TransformerMixin):
         return self
 
     def transform(self, X):
-        if isinstance(X, list):
-            cleaned_post = []
-            for owner_id in X:
-                resp = self.vk.wall.get(owner_id=owner_id * -1, offset=0, count=1)
-                if resp['count'] > 100:
-                    repeat_post = int(resp['count'] / 100)
-                    if repeat_post > 0 and repeat_post < 1:
-                        repeat_post = 0
-                    offset = 0
-                    for post_100 in range(repeat_post):
-                        time.sleep(0.5)
-                        resp = self.vk.wall.get(owner_id=owner_id * -1, offset=offset, count=100)
-                        for post in resp['items']:
-                            text = post['text']
-                            try:
-                                text += post['copy_history'][0]['text']
-                            except:
-                                pass
-                            cleaned_post.append(text)
-                        offset += 100
-                        if post_100 == self.max_repeat_count:
-                            break
-            return cleaned_post
-        else:
+        if not isinstance(X, list):
             return self
+        cleaned_post = []
+        for group in X:
+            resp = self.vk.wall.get(owner_id=group * -1, offset=0, count=1)  # получаем общее количетво постов
+            if resp['count'] > 100:
+                repeat_post = int(resp['count'] / 100)  # количество повтором что бы получить все посты группы
+                if 0 < repeat_post < 1:
+                    repeat_post = 0
+                offset = 0
+                post_group = []
+                for post_100 in range(repeat_post):  # проходимся по 100 все посты группы
+                    time.sleep(0.5)
+                    resp = self.vk.wall.get(owner_id=group * -1, offset=offset, count=100)
+                    for post in resp['items']:
+                        text = post['text']
+                        try:
+                            text += post['copy_history'][0]['text']  # Если у репоста был текст
+                        except:
+                            pass
+                        post_group.append(text)
+                    offset += 100
+                    if post_100 == self.max_repeat_count:
+                        break
+                cleaned_post.append({group: post_group})
+        return cleaned_post
 
 
 class ClearTextPipeline(TransformerMixin):
@@ -142,7 +145,84 @@ class TokenNormalizationPipeline(TransformerMixin):
         return clear
 
 
-class GetWallPhotosPipeline(TransformerMixin):
+class GetWallUserPhotoPipeline(TransformerMixin):
+    def __init__(self, max_repeat_count, sizes=['m', 'o', 'p', 'q', 'r', 's', 'w', 'x', 'y', 'z']):
+        self.vk_session = vk_api.VkApi(os.getenv('LOGIN'), os.getenv('PASSWORD'))
+        self.vk_session.auth()
+        self.vk = self.vk_session.get_api()
+        self.max_repeat_count = max_repeat_count
+        self.selected_size = sizes
+
+    def get_wall_photos_group(self, user_id, repeat_offset):
+        offset = 0
+        group_photos = []
+        for _ in range(repeat_offset):
+            response = self.vk.photos.get(owner_id=user_id, album_id="wall", count=100, offset=offset)
+            offset += 100
+            for item in response['items']:
+                image = [
+                    size['url']
+                    for size in item['sizes']
+                    if size['type'] in self.selected_size
+                ]
+                group_photos.append({
+                    "date": item['date'],
+                    "image": image
+                })
+            if _ == self.max_repeat_count:
+                break
+            time.sleep(0.4)
+        return group_photos
+
+    def get_wall_photo_on_group(self, X):
+        result = []
+        screen_name = X.split('/')[-1]
+        res = self.vk.utils.resolveScreenName(screen_name=screen_name)
+        print(res)
+        group_id = res['object_id']
+        response = self.vk.photos.get(owner_id=group_id, album_id="wall", count=1)
+        print(response)
+        time.sleep(0.3)
+        repeat_offset = int(math.ceil(response['count'] / 100))
+        photos_group = self.get_wall_photos_group(group_id, repeat_offset)
+        result.append({group_id: photos_group})
+        return result
+
+
+    def get_wall_photo_on_list_group(self, X):
+        """
+            Получаем все фотки с стены если был передан массив с id пользоватлеями
+        """
+        result = []
+        for group_id in tqdm(X):
+            time.sleep(0.4)
+            response = self.vk.photos.get(owner_id=group_id, album_id="wall", count=1)
+            if response['count'] > 100:
+                repeat_offset = int(response['count'] / 100)
+                if 0 < repeat_offset < 1:
+                    repeat_offset = 0
+                photos_group = self.get_wall_photos_group(group_id, repeat_offset)
+                result.append({group_id: photos_group})
+        return result
+
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        if isinstance(X, list):
+            return  self.get_wall_photo_on_list_group(X)
+        elif isinstance(X, str):
+            return self.get_wall_photo_on_group(X)
+        else:
+            return self
+
+class GetWallGroupPhotosPipeline(TransformerMixin):
+    """
+        Получаем список фотографий со стены группы
+        О размерах изображений https://vk.com/dev/photo_sizes
+        Самый популярный x рекомендую его
+    """
     def __init__(self, max_repeat_count, sizes=['m', 'o', 'p', 'q', 'r', 's', 'w', 'x', 'y', 'z']):
         self.vk_session = vk_api.VkApi(os.getenv('LOGIN'), os.getenv('PASSWORD'))
         self.vk_session.auth()
@@ -153,47 +233,65 @@ class GetWallPhotosPipeline(TransformerMixin):
     def fit(self, X, y=None):
         return self
 
-    def transform(self, X):
+    def get_wall_photos_group(self, user_id, repeat_offset):
+        offset = 0
+        group_photos = []
+        for _ in range(repeat_offset):
+            response = self.vk.photos.get(owner_id=user_id, album_id="wall", count=100, offset=offset)
+            offset += 100
+            for item in response['items']:
+                image = [
+                    size['url']
+                    for size in item['sizes']
+                    if size['type'] in self.selected_size
+                ]
+                group_photos.append({
+                    "date": item['date'],
+                    "image": image
+                })
+            if _ == self.max_repeat_count:
+                break
+            time.sleep(0.4)
+        return group_photos
+
+    def get_wall_photo_on_list_group(self, X):
+        """
+            Получаем все фотки с стены если был передан массив с id групп
+        """
+        result = []
+        for group_id in tqdm(X):
+            time.sleep(0.4)
+            response = self.vk.photos.get(owner_id=group_id * -1, album_id="wall", count=1)
+            if response['count'] > 100:
+                repeat_offset = int(response['count'] / 100)
+                if 0 < repeat_offset < 1:
+                    repeat_offset = 0
+                photos_group = self.get_wall_photos_group(group_id * -1, repeat_offset)
+                result.append({group_id: photos_group})
+        return result
+
+    def get_wall_photo_on_group(self, X):
+        result = []
         screen_name = X.split('/')[-1]
         res = self.vk.utils.resolveScreenName(screen_name=screen_name)
-        user_id = res['object_id']
-        user_type = res['type']
-
-        if user_type == 'group':
-            user_id *= -1
-
-        result = []
-        response = self.vk.photos.get(owner_id=user_id, album_id="wall", count=1)
+        group_id = res['object_id']
+        response = self.vk.photos.get(owner_id=group_id * -1, album_id="wall", count=1)
+        time.sleep(0.3)
         if response['count'] > 100:
             repeat_offset = int(response['count'] / 100)
             if 0 < repeat_offset < 1:
                 repeat_offset = 0
-            offset = 0
-            for i in range(repeat_offset):
-                response = self.vk.photos.get(owner_id=user_id, album_id="wall", count=100, offset=offset)
-                offset += 100
-                print(response['items'])
-                for item in response['items']:
-                    image = []
-                    for size in item['sizes']:
-                        if size['type'] in self.selected_size:
-                            image.append(['url'])
-                    result.append({
-                        "date": item['date'],
-                        "image": image
-                    })
-        else:
-            response = self.vk.photos.get(owner_id=user_id, album_id="wall", count=100)
-            for item in response['items']:
-                image = []
-                for size in item['sizes']:
-                    if size['type'] in self.selected_size:
-                        image.append(size['url'])
-                result.append({
-                    "date": item['date'],
-                    "image": image
-                })
+            photos_group = self.get_wall_photos_group(group_id * -1, repeat_offset)
+            result.append({group_id: photos_group})
         return result
+
+    def transform(self, X):
+        if isinstance(X, list):
+            return  self.get_wall_photo_on_list_group(X)
+        elif isinstance(X, str):
+            return self.get_wall_photo_on_group(X)
+        else:
+            return self
 
 
 class GetUserGroupsPipeline(TransformerMixin):
@@ -206,16 +304,23 @@ class GetUserGroupsPipeline(TransformerMixin):
         return self
 
     def transform(self, X):
-        result = []
         if isinstance(X, list):
+            result = []
             for user_id in X:
-                response = self.vk.groups.get(owner_id=user_id, extended=0, count=1000)
+                response = self.vk.groups.get(user_id=user_id, extended=0, count=1000)
                 result.append({user_id: response['items']})
+            return result
+        else:
+            print(X)
+            screen_name = X.split('/')[-1]
+            res = self.vk.utils.resolveScreenName(screen_name=screen_name)
+            user_id = res['object_id']
+            print(user_id)
+            response = self.vk.groups.get(user_id=user_id, extended=0, count=1000)
+            return response['items']
 
-        return result
 
-
-class  GetUserSubscriptionPipeline(TransformerMixin):
+class GetUserSubscriptionPipeline(TransformerMixin):
     def __init__(self):
         self.vk_session = vk_api.VkApi(os.getenv('LOGIN'), os.getenv('PASSWORD'))
         self.vk_session.auth()
