@@ -4,11 +4,11 @@
 
 `parser.py` - Загрузка постов с групп и пабликов
 
-На вход, список групп, на выходе json со всеми постами и всеми данными о постах
+На вход, список групп, на выходе  со всеми постами и всеми данными о постах
 
 Пример запуска:
 
-`python parser.py -login 79145467052 -password 3325cfv -input_file group_vk.txt -output_file output.json -batch_size 25 -max_repeat 1 `
+`python parser.py -login 79145467052 -password 3325cfv -input_file group_vk.txt -output_file output. -batch_size 25 -max_repeat 1 `
 
 
 ## Pipeline Vk API
@@ -36,7 +36,7 @@ tf = clearing.transform("https://vk.com/mzadornov")
 #tf = clearing.transform([1,33,43123])
 ```
 **Output** 
-```json
+```
 [{87896266: [{'id': 77442,
     'from_id': 144646146,
     'to_id': 137593188,
@@ -70,7 +70,7 @@ tf = clearing.transform("https://vk.com/mzadornov")
 #tf = clearing.transform([1,33,43123])
 ```
 **Output** 
-```json
+```
 [{87896266: [27938289, 55290352, 38875204, 47245446, 23471538, 30643528]}]
 ```
 
@@ -94,7 +94,7 @@ tf = clearing.transform("https://vk.com/mzadornov")
 #tf = clearing.transform([1,33,43123])
 ```
 **Output** 
-```json
+```
 [{87896266: [23471538, 27938289, 30643528, 38875204, 47245446, 55290352]}]
 ```
 
@@ -118,7 +118,7 @@ tf = clearing.transform("https://vk.com/mzadornov")
 #tf = clearing.transform([1,33,43123])
 ```
 **Output** 
-```json
+```
 [{87896266: [687426,
    8379667,
    17556755,
@@ -157,7 +157,7 @@ tf = clearing.transform("https://vk.com/mzadornov")
 #tf = clearing.transform([1,33,43123])
 ```
 
-```json
+```
 [{87896266: ['#Задорнов #конкурс #книги ... ..... .ru',]}]
 ```
 
@@ -187,7 +187,7 @@ tf = clearing.transform("https://vk.com/mnzador")
 #tf = clearing.transform([1,33,43123])
 ```
 
-```json
+```
 [{27938289: ['Фотоальбомы "Задорные наблюдашки". Собрано 40000. \n \nПравила добавлений vk.cc/1i4gLg...', ... ]}]_
 ```
 
@@ -219,7 +219,7 @@ tf = clearing.transform("https://vk.com/mnzador")
 #tf = clearing.transform([1,33,43123])
 ```
 
-```json
+```
 [{27938289: [{'date': 1408020284,
     'image': ['https://sun9-33.userapi.com/ndV51Ztcw_xmMRxbcK-BYcBjeyNtJy7bz8uc6A/-GNDpjKnggI.jpg']},
    {'date': 1450794156,
@@ -250,7 +250,7 @@ tf = clearing.transform("https://vk.com/mnzador")
 #tf = clearing.transform([1,33,43123])
 ```
 
-```json
+```
 [{87896266: [{'date': 1538472271,
     'image': ['https://sun1-86.userapi.com/c850436/v850436168/156b9/cb1OqydQcGs.jpg']},
  ... ]}]
@@ -281,7 +281,7 @@ tf = clearing.transform("https://vk.com/lambdamai")
 #tf = clearing.transform([1,33,43123])
 ```
 
-```json
+```
 [{105873414: [24147,
    74372,
    112394,
