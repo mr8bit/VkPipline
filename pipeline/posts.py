@@ -8,6 +8,56 @@ from stop_words import get_stop_words
 import numpy as np
 from tqdm import tqdm
 import math
+import traceback
+from vk_api.exceptions import ApiError
+
+user_template = {
+    "user_id": '',
+    "content": {
+        "wall": [],
+        "photos": [],
+        "friends": [],
+        "groups": []
+    }
+}
+
+
+class GetPostsFromUserPipelineV2(TransformerMixin):
+    def __init__(self, max_repeat_count, only_user_text):
+        self.vk_session = vk_api.VkApi(os.getenv('LOGIN'), os.getenv('PASSWORD'))
+        self.vk_session.auth()
+        self.vk = self.vk_session.get_api()
+        self.max_repeat_count = max_repeat_count
+        self.only_user_text = only_user_text
+
+    def fit(self):
+        return self
+
+    def transform(self, X):
+        if isinstance(X, str):
+            user_posts = []
+            screen_name = X.split('/')[-1]
+            resp = self.vk.utils.resolveScreenName(screen_name=screen_name)
+            owner_id = resp['object_id']
+            resp = self.vk.wall.get(owner_id=owner_id, offset=0, count=1)
+            repeat_offset = int(math.ceil(resp['count'] / 100))
+            offset = 0
+            for _ in range(repeat_offset):
+                time.sleep(0.45)
+                resp = self.vk.wall.get(owner_id=owner_id, offset=offset, count=100)
+                for post in resp['items']:
+                    text = post['text']
+                    if not self.only_user_text:
+                        try:
+                            text += post['copy_history'][0]['text']
+                        except:
+                            pass
+                    if len(text)>5:
+                        user_posts.append(text)
+                offset += 100
+                if _ == self.max_repeat_count:
+                    break
+            return [{"user_id": owner_id, "content": {"wall": user_posts}}]
 
 
 class GetAllTextPostsFromGroupPipeline(TransformerMixin):
@@ -25,30 +75,44 @@ class GetAllTextPostsFromGroupPipeline(TransformerMixin):
     def fit(self, X, y=None):
         return self
 
+    def get_post_from_group(self, repeat_offset, groupid):
+        offset = 0
+        post_group = []
+        for repeater in range(repeat_offset):  # проходимся по 100 все посты группы
+            time.sleep(0.5)  # Что бы не блокировали ждем пол секунды
+            resp = self.vk.wall.get(owner_id=groupid, offset=offset, count=100)
+            for post in resp['items']:
+                text = post['text']
+                try:
+                    text += post['copy_history'][0]['text']  # Если у репоста был текст
+                except Exception as e:
+                    pass
+                if len(text) > 5:
+                    post_group.append(text)
+            offset += 100
+            if repeater == self.max_repeat_count:  # останавливаем цикл
+                break
+        return post_group
+
     def transform(self, X):
         if isinstance(X, list):
-            cleaned_post = []
-            for group in X:
-                resp = self.vk.wall.get(owner_id=group * -1, offset=0, count=1)  # получаем общее количетво постов
-                repeat_offset = int(math.ceil(resp['count'] / 100))
-                offset = 0
-                post_group = []
-                for post_100 in range(repeat_offset):  # проходимся по 100 все посты группы
-                    time.sleep(0.5)
-                    resp = self.vk.wall.get(owner_id=group * -1, offset=offset, count=100)
-                    for post in resp['items']:
-                        text = post['text']
+            user_group_post = []
+            for user in X:
+                for id in user.keys():
+                    cleaned_post = []
+                    for group in tqdm(user[id]):
                         try:
-                            text += post['copy_history'][0]['text']  # Если у репоста был текст
-                        except:
-                            pass
-                        if len(text)>5:
-                            post_group.append(text)
-                    offset += 100
-                    if post_100 == self.max_repeat_count:
-                        break
-                cleaned_post.append({group: post_group})
-            return cleaned_post
+                            resp = self.vk.wall.get(owner_id=group * -1, offset=0,
+                                                    count=1)  # получаем общее количетво постов
+                        except ApiError:  # Если группа закрытая
+                            traceback.print_exc()
+                            cleaned_post.append({group: False})
+                            continue
+                        repeat_offset = int(math.ceil(resp['count'] / 100))  # считаем сколько раз надо пройтись
+                        post_group = self.get_post_from_group(repeat_offset, group * -1)  # получаем посты с группы
+                        cleaned_post.append({group: post_group})
+                    user_group_post.append({id: cleaned_post})
+            return user_group_post
 
         if isinstance(X, str):
             cleaned_post = []
@@ -68,12 +132,12 @@ class GetAllTextPostsFromGroupPipeline(TransformerMixin):
                             text += post['copy_history'][0]['text']
                         except:
                             pass
-                        if len(text)>5:
+                        if len(text) > 5:
                             cleaned_post.append(text)
                     offset += 100
                     if post_100 == self.max_repeat_count:
                         break
-                return [{owner_id:cleaned_post}]
+                return [{owner_id: cleaned_post}]
 
 
 class GetAllTextPostsFromUserPipeline(TransformerMixin):
@@ -91,41 +155,50 @@ class GetAllTextPostsFromUserPipeline(TransformerMixin):
     def fit(self, X, y=None):
         return self
 
+    def get_post_from_group(self, repeat_offset, groupid):
+        offset = 0
+        post_group = []
+        for repeater in range(repeat_offset):  # проходимся по 100 все посты группы
+            time.sleep(0.5)  # Что бы не блокировали ждем пол секунды
+            resp = self.vk.wall.get(owner_id=groupid, offset=offset, count=100)
+            for post in resp['items']:
+                text = post['text']
+                if len(text) > 5:
+                    post_group.append(text)
+            offset += 100
+            if repeater == self.max_repeat_count:  # останавливаем цикл
+                break
+        return post_group
+
     def transform(self, X):
         if isinstance(X, list):
-            cleaned_post = []
+            user_group_post = []
             for user in X:
-                resp = self.vk.wall.get(owner_id=user, offset=0, count=1)  # получаем общее количетво постов
-                repeat_offset = int(math.ceil(resp['count'] / 100))
-                offset = 0
-                post_group = []
-                for post_100 in range(repeat_offset):  # проходимся по 100 все посты группы
-                    time.sleep(0.5)
-                    resp = self.vk.wall.get(owner_id=user, offset=offset, count=100)
-                    for post in resp['items']:
-                        text = post['text']
+                for id in user.keys():
+                    cleaned_post = []
+                    for group in tqdm(user[id]):
                         try:
-                            text += post['copy_history'][0]['text']  # Если у репоста был текст
-                        except:
-                            pass
-                        if len(text)>5:
-                            post_group.append(text)
-                    offset += 100
-                    if post_100 == self.max_repeat_count:
-                        break
-                cleaned_post.append({user: post_group})
-            return cleaned_post
+                            resp = self.vk.wall.get(owner_id=group, offset=0,
+                                                    count=1)  # получаем общее количетво постов
+                        except ApiError:  # Если группа закрытая
+                            traceback.print_exc()
+                            cleaned_post.append({group: False})
+                            continue
+                        repeat_offset = int(math.ceil(resp['count'] / 100))  # считаем сколько раз надо пройтись
+                        post_group = self.get_post_from_group(repeat_offset, group)  # получаем посты с группы
+                        cleaned_post.append({group: post_group})
+                    user_group_post.append({id: cleaned_post})
+            return user_group_post
 
         if isinstance(X, str):
             cleaned_post = []
             screen_name = X.split('/')[-1]
             resp = self.vk.utils.resolveScreenName(screen_name=screen_name)
-            if resp['type'] == 'user':
+            if resp['type'] == 'group':
                 owner_id = resp['object_id']
                 resp = self.vk.wall.get(owner_id=owner_id, offset=0, count=1)
                 repeat_offset = int(math.ceil(resp['count'] / 100))
                 offset = 0
-                print(resp)
                 for post_100 in range(repeat_offset):
                     time.sleep(0.5)
                     resp = self.vk.wall.get(owner_id=owner_id, offset=offset, count=100)
@@ -135,7 +208,7 @@ class GetAllTextPostsFromUserPipeline(TransformerMixin):
                             text += post['copy_history'][0]['text']
                         except:
                             pass
-                        if len(text)>5:
+                        if len(text) > 5:
                             cleaned_post.append(text)
                     offset += 100
                     if post_100 == self.max_repeat_count:
