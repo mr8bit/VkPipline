@@ -7,6 +7,33 @@ import traceback
 from vk_api.exceptions import ApiError
 
 
+class GetUserIdPipelineV2(TransformerMixin):
+    """
+        Получаем id пользователей
+    """
+
+    def __init__(self):
+        self.vk_session = vk_api.VkApi(os.getenv('LOGIN'), os.getenv('PASSWORD'))
+        self.vk_session.auth()
+        self.vk = self.vk_session.get_api()
+
+    def fit(self):
+        return self
+
+    def transform(self, X):
+        if isinstance(X, list):
+            result = []
+            for user_link in X:
+                screen_name = user_link.split('/')[
+                    -1]  # получаем коротное имя пользователя (вроде как работает и с форматом id321321)
+                res = self.vk.utils.resolveScreenName(screen_name=screen_name)
+                user_id = res['object_id']
+                result.append({"user_id": user_id, 'content': {} })
+            return result
+        else:
+            return self
+
+
 class GetUserSubscriptionPipelineV2(TransformerMixin):
     """
         Получить подписки пользователя страницы пабликов
@@ -43,6 +70,7 @@ class GetUserSubscriptionPipelineV2(TransformerMixin):
             result.append({user_id: response['groups']['items']})
 
         return result
+
 
 class GetUserFriendPipelineV2(TransformerMixin):
     """
@@ -81,6 +109,7 @@ class GetUserFriendPipelineV2(TransformerMixin):
             return result
         else:
             return self
+
 
 class GetUserGroupsPipelineV2(TransformerMixin):
     """
@@ -208,7 +237,6 @@ class GetUserGroupsPipeline(TransformerMixin):
             except ApiError:
                 traceback.print_exc()
                 return [{user_id: False}]
-
 
 
 class GetUserSubscriptionPipeline(TransformerMixin):

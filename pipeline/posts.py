@@ -34,30 +34,35 @@ class GetPostsFromUserPipelineV2(TransformerMixin):
         return self
 
     def transform(self, X):
-        if isinstance(X, str):
-            user_posts = []
-            screen_name = X.split('/')[-1]
-            resp = self.vk.utils.resolveScreenName(screen_name=screen_name)
-            owner_id = resp['object_id']
-            resp = self.vk.wall.get(owner_id=owner_id, offset=0, count=1)
-            repeat_offset = int(math.ceil(resp['count'] / 100))
-            offset = 0
-            for _ in range(repeat_offset):
-                time.sleep(0.45)
-                resp = self.vk.wall.get(owner_id=owner_id, offset=offset, count=100)
-                for post in resp['items']:
-                    text = post['text']
-                    if not self.only_user_text:
-                        try:
-                            text += post['copy_history'][0]['text']
-                        except:
-                            pass
-                    if len(text)>5:
-                        user_posts.append(text)
-                offset += 100
-                if _ == self.max_repeat_count:
-                    break
-            return [{"user_id": owner_id, "content": {"wall": user_posts}}]
+        if isinstance(X, list):
+            for user in X:
+                try:
+                    resp = self.vk.wall.get(owner_id=user['user_id'], offset=0, count=1)
+                    repeat_offset = int(math.ceil(resp['count'] / 100))
+                    offset = 0
+                    user["content"]["wall"] = []
+                    for repeat in range(repeat_offset):
+                        time.sleep(0.45)
+                        resp = self.vk.wall.get(owner_id=user['user_id'], offset=offset, count=100)
+                        for post in resp['items']:
+                            text = post['text']
+                            if not self.only_user_text:
+                                try:
+                                    text += post['copy_history'][0]['text']
+                                except:
+                                    pass
+                            user["content"]["wall"].append(text)
+                        offset += 100
+                        if repeat == self.max_repeat_count:
+                            break
+                except ApiError:
+                    user["content"]["wall"] = []
+                    traceback.print_exc()
+                    continue
+            return X
+
+        else:
+            return self
 
 
 class GetAllTextPostsFromGroupPipeline(TransformerMixin):
