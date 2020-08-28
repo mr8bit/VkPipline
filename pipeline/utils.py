@@ -37,24 +37,18 @@ class ClearTextPipeline(TransformerMixin):
                                     u"\u001f90d"
                                     u"\u200d"
                                     u"\u2640-\u2642"
-                                    u"\u0001f90d"
+                                    u"\U0001F90d"
                                     "]+", flags=re.UNICODE)
 
         return regrex_pattern.sub(r'', text)
+
     def mister_cleaner(self, text):
         text = emoji_remove(str(text))
         bad_chars = [';', ':', '!', "*", '^', '_', ']', '[', '(', ')']
-        text = ''.join(text.replace(i, "") for i in bad_chars)
-        text = re.sub(
-            r'(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’]))',
-            '', text)
-        text = text.lower()
+
+        text = re.sub(r"http\S+", "", text)
         text = re.sub("#(\w+)", " ", text)
         text = re.sub("([\(\[]).*?([\)\]])", "", text)
-        text = text.replace("]", "")
-        text = text.replace("[", "")
-        text = text.replace("(", "")
-        text = text.replace(")", "")
         text = text.split('\n')
         data = [re.sub('\S*@\S*\s?', '', sent) for sent in text]
 
@@ -62,6 +56,8 @@ class ClearTextPipeline(TransformerMixin):
         data = [re.sub('\s+', ' ', sent) for sent in data]
         text = [re.sub("\'", "", sent) for sent in data]
         text = ' '.join(text)
+        for i in bad_chars:
+            text = text.replace(i, "")
         return text
 
     def fit(self, X, y=None):
@@ -71,6 +67,8 @@ class ClearTextPipeline(TransformerMixin):
         for user in X:
             clear_user_wall = []
             for post in user['content']['wall']:
-                clear_user_wall.append(self.mister_cleaner(post))
+                cleaned_post = self.mister_cleaner(post)
+                if len(cleaned_post)>1:
+                    clear_user_wall.append(self.mister_cleaner(post))
             user['content']['wall'] = clear_user_wall
         return X
