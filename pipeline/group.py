@@ -10,6 +10,30 @@ from tqdm import tqdm
 import math
 
 
+class GroupIdPipelineV2(TransformerMixin):
+    """
+        Получаем id пользователей
+    """
+
+    def __init__(self):
+        self.vk_session = vk_api.VkApi(os.getenv('LOGIN'), os.getenv('PASSWORD'))
+        self.vk_session.auth()
+        self.vk = self.vk_session.get_api()
+
+    def fit(self):
+        return self
+
+    def transform(self, X):
+        if isinstance(X, list):
+            result = []
+            for group_id in X:
+                result.append({"group_id": int(group_id)*-1, 'content': {} })
+            return result
+        else:
+            return self
+
+
+
 class GetUsersFromGroupPipeline(TransformerMixin):
     """
         Пользователи из группы

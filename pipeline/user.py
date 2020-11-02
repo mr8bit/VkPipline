@@ -5,7 +5,7 @@ import math
 import time
 import traceback
 from vk_api.exceptions import ApiError
-
+from tqdm import tqdm
 
 class GetUserIdPipelineV2(TransformerMixin):
     """
@@ -23,12 +23,13 @@ class GetUserIdPipelineV2(TransformerMixin):
     def transform(self, X):
         if isinstance(X, list):
             result = []
-            for user_link in X:
+            for user_link in tqdm(X):
                 screen_name = user_link.split('/')[
                     -1]  # получаем коротное имя пользователя (вроде как работает и с форматом id321321)
                 res = self.vk.utils.resolveScreenName(screen_name=screen_name)
-                user_id = res['object_id']
-                result.append({"user_id": user_id, 'content': {} })
+                if res:
+                    user_id = res['object_id']
+                    result.append({"user_id": user_id, 'content': {} })
             return result
         else:
             return self
@@ -50,7 +51,7 @@ class GetUserSubscriptionPipelineV2(TransformerMixin):
     def transform(self, X):
         result = []
         if isinstance(X, list):
-            for user in X:
+            for user in tqdm(X):
                 user_id = user["user_id"]
                 time.sleep(0.4)
                 try:
@@ -127,7 +128,7 @@ class GetUserGroupsPipelineV2(TransformerMixin):
     def transform(self, X):
         if isinstance(X, list):
             result = []
-            for user in X:
+            for user in tqdm(X):
                 user_id = user["user_id"]
                 time.sleep(0.4)
                 try:
